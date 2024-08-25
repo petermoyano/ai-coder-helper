@@ -1,2 +1,4 @@
 /node_modules/
 /mirror_repo/
+/.vscode
+.env

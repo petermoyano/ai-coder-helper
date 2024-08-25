@@ -2,6 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import ignore from 'ignore';
 
+const scriptFileName = 'scrape_repo.js';
+const metadataFileName = 'repo_metadata.json';
+
 const languageMap = {
   '.js': 'JavaScript',
   '.ts': 'TypeScript',
@@ -36,11 +39,10 @@ function loadGitignore(gitignorePath) {
     const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
     const ig = ignore().add(gitignoreContent);
 
-    const scriptFileName = path.basename(__filename);
-
     ig.add('mirror_repo');
     ig.add('node_modules');
     ig.add(scriptFileName);
+    ig.add(metadataFileName);
 
     return ig;
   } catch (err) {
@@ -49,7 +51,7 @@ function loadGitignore(gitignorePath) {
   }
 }
 
-function collectFileMetadata(filePath) {
+function collectFileMetadata(filePath, repoName) {
   try {
     const stats = fs.statSync(filePath);
     const metadata = {
@@ -59,6 +61,7 @@ function collectFileMetadata(filePath) {
       fileSize: stats.size,
       language: getLanguage(filePath),
       hierarchy: path.relative(process.cwd(), filePath).split(path.sep).slice(0, -1),
+      repoName: repoName,
     };
 
     return metadata;
@@ -68,7 +71,7 @@ function collectFileMetadata(filePath) {
   }
 }
 
-function createMirrorDirectoryStructure(srcDir, destDir, ig) {
+function createMirrorDirectoryStructure(srcDir, destDir, ig, repoName) {
   try {
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
@@ -83,16 +86,15 @@ function createMirrorDirectoryStructure(srcDir, destDir, ig) {
       const relativePath = path.relative(srcDir, srcFilePath);
       const stats = fs.statSync(srcFilePath);
 
-      // Skip directories that start with a dot or are ignored
       if ((stats.isDirectory() && file.startsWith('.')) || ig.ignores(relativePath)) {
         console.log(`Ignored: ${relativePath}`);
         return;
       }
 
       if (stats.isDirectory()) {
-        createMirrorDirectoryStructure(srcFilePath, destFilePath, ig);
+        createMirrorDirectoryStructure(srcFilePath, destFilePath, ig, repoName);
       } else if (stats.isFile()) {
-        const metadata = collectFileMetadata(srcFilePath);
+        const metadata = collectFileMetadata(srcFilePath, repoName);
         copyFileWithMetadataComments(srcFilePath, destFilePath, metadata);
       }
     });
@@ -102,22 +104,20 @@ function createMirrorDirectoryStructure(srcDir, destDir, ig) {
   }
 }
 
-
 function copyFileWithMetadataComments(srcFilePath, destFilePath, metadata) {
   try {
     const fileContent = fs.readFileSync(srcFilePath, 'utf-8');
 
     const metadataComment = `
 /*
- * Start of file: ${metadata.filePath}
- * File Name: ${metadata.fileName}
- * File Size: ${metadata.fileSize} bytes
- * Last Modified: ${metadata.lastModified}
- * Language: ${metadata.language}
- * Hierarchy: ${metadata.hierarchy.join(' > ')}
- */
-
-`;
+* Project Name: ${metadata.repoName}
+* File Name: ${metadata.fileName}
+* File Size: ${metadata.fileSize} bytes
+* Last Modified: ${metadata.lastModified}
+* Language: ${metadata.language}
+* Hierarchy: ${metadata.hierarchy.join(' > ')}
+* Start of file: ${metadata.filePath}
+*/`;
 
     const commentedContent = `${metadataComment}\n${fileContent}\n/* End of file: ${metadata.filePath} */`;
 
@@ -128,7 +128,7 @@ function copyFileWithMetadataComments(srcFilePath, destFilePath, metadata) {
   }
 }
 
-function collectCodebaseMetadata(dirPath) {
+function collectCodebaseMetadata(dirPath, repoName) {
   const gitignorePath = path.join(dirPath, '.gitignore');
   const ig = loadGitignore(gitignorePath);
   let allMetadata = [];
@@ -157,7 +157,7 @@ function collectCodebaseMetadata(dirPath) {
         if (stats.isDirectory()) {
           traverse(fullPath, depth + 1);
         } else if (stats.isFile()) {
-          const fileMetadata = collectFileMetadata(fullPath);
+          const fileMetadata = collectFileMetadata(fullPath, repoName);
           allMetadata.push(fileMetadata);
           fileCount++;
 
@@ -181,7 +181,7 @@ function collectCodebaseMetadata(dirPath) {
   }
   console.log('**************************************************')
 
-  return allMetadata;
+  return { repoName, metadata: allMetadata };
 }
 
 function saveMetadataToFile(metadata, outputFileName) {
@@ -195,10 +195,10 @@ function saveMetadataToFile(metadata, outputFileName) {
   }
 }
 
-
 function runAiCoderHelper() {
   try {
     const codebaseDir = process.cwd();
+    const repoName = path.basename(codebaseDir);
     const mirrorDir = path.join(codebaseDir, 'mirror_repo');
     const gitignorePath = path.join(codebaseDir, '.gitignore');
 
@@ -211,10 +211,10 @@ function runAiCoderHelper() {
 
     fs.mkdirSync(mirrorDir, { recursive: true });
 
-    const metadata = collectCodebaseMetadata(codebaseDir);
-    saveMetadataToFile(metadata, 'codebase_metadata.json');
+    const metadata = collectCodebaseMetadata(codebaseDir, repoName);
+    saveMetadataToFile(metadata, metadataFileName);
 
-    createMirrorDirectoryStructure(codebaseDir, mirrorDir, ig);
+    createMirrorDirectoryStructure(codebaseDir, mirrorDir, ig, repoName);
     console.log(`Mirror codebase created successfully in: ${mirrorDir}`);
   } catch (err) {
     console.error(`Error in runAiCoderHelper: ${err.message}`);
