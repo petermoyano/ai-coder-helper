@@ -1,0 +1,41 @@
+{
+  "repoName": "ai-coder-helper",
+  "metadata": [
+    {
+      "fileName": ".gitignore",
+      "filePath": ".gitignore",
+      "lastModified": "2024-08-25T18:03:38.724Z",
+      "fileSize": 42,
+      "language": "Unknown",
+      "hierarchy": [],
+      "repoName": "ai-coder-helper"
+    },
+    {
+      "fileName": "package-lock.json",
+      "filePath": "package-lock.json",
+      "lastModified": "2024-08-25T15:26:37.900Z",
+      "fileSize": 581,
+      "language": "JSON",
+      "hierarchy": [],
+      "repoName": "ai-coder-helper"
+    },
+    {
+      "fileName": "package.json",
+      "filePath": "package.json",
+      "lastModified": "2024-08-25T15:05:19.272Z",
+      "fileSize": 291,
+      "language": "JSON",
+      "hierarchy": [],
+      "repoName": "ai-coder-helper"
+    },
+    {
+      "fileName": "upload_repo_data.js",
+      "filePath": "upload_repo_data.js",
+      "lastModified": "2024-08-25T18:22:45.627Z",
+      "fileSize": 2070,
+      "language": "JavaScript",
+      "hierarchy": [],
+      "repoName": "ai-coder-helper"
+    }
+  ]
+}

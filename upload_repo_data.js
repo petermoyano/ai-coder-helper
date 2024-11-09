@@ -1,26 +1,15 @@
-import pinecone from "@pinecone-database/pinecone";
+import pinecone from '@pinecone-database/pinecone';
+import { OpenAIEmbeddings } from "@langchain/openai";
+import { PineconeStore } from "@langchain/pinecone";
 import fs from "fs";
-import { OpenAIEmbeddings } from "openai";
 import path from "path";
+import 'dotenv/config';
 
-const pineconeClient = new pinecone.Client({ apiKey: process.env.PINECONE_API_KEY });
-const pineconeIndex = pineconeClient.Index('your-index-name');
+const { Pinecone } = pinecone;
+const PineconeClient = Pinecone;
 
-const openaiEmbeddings = new OpenAIEmbeddings('gpt-4-turbo-2024-04-09', { apiKey: process.env.OPENAI_API_KEY });
-
-async function deleteOldVectors(repoName) {
-  const deleteFilter = {
-    metadata: {
-      repoName: repoName
-    }
-  };
-
-  await pineconeIndex.delete(deleteFilter);
-
-  console.log(`Old vectors for repo ${repoName} have been deleted.`);
-}
-
-async function uploadToPinecone() {
+async function loadDocuments() {
+  console.log('Loading documents from mirror_repo...');
   const mirrorRepoPath = path.join(process.cwd(), 'mirror_repo');
   const metadataFilePath = path.join(process.cwd(), 'repo_metadata.json');
 
@@ -31,38 +20,66 @@ async function uploadToPinecone() {
     throw new Error('The repo_metadata.json file does not exist. Please generate it before running the upload.');
   }
 
-  const metadata = JSON.parse(fs.readFileSync(metadataFilePath, 'utf8'));
-  const repoName = metadata.repoName;
+  const metadataContent = fs.readFileSync(metadataFilePath, 'utf8');
+  const metadata = JSON.parse(metadataContent);
+  console.log(`Loaded metadata for ${metadata.metadata.length} files.`);
 
-  await deleteOldVectors(repoName);
-
-  const vectors = [];
+  const documents = [];
 
   for (const file of metadata.metadata) {
     const filePath = path.join(mirrorRepoPath, file.filePath);
-
     const fileContent = fs.readFileSync(filePath, 'utf8');
 
-    const embedding = await openaiEmbeddings.embedText(fileContent);
+    const docMetadata = {
+      fileName: file.fileName,
+      filePath: file.filePath,
+      lastModified: file.lastModified,
+      fileSize: file.fileSize,
+      language: file.language,
+      repoName: file.repoName,
+      hierarchy: file.hierarchy.join(' > '),
+    };
 
-    vectors.push({
-      id: `${file.filePath}/${file.fileName}`,
-      values: embedding,
-      metadata: {
-        fileName: file.fileName,
-        filePath: file.filePath,
-        language: file.language,
-        repoName: file.repoName,
-        hierarchy: file.hierarchy.join(' > ')
-      }
+    documents.push({
+      pageContent: fileContent,
+      metadata: docMetadata,
     });
   }
 
-  await pineconeIndex.upsert({
-    vectors: vectors
+  console.log(`Prepared ${documents.length} documents for upload.`);
+  return documents;
+}
+
+async function uploadToPinecone() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key is not set in environment variables.');
+  }
+
+  // Initialize Pinecone client without the environment property
+  const pinecone = new PineconeClient({
+    apiKey: process.env.PINECONE_API_KEY,
   });
 
-  console.log('New data successfully uploaded to Pinecone');
+  // Get the index reference, which includes the environment information
+  const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX);
+
+  const documents = await loadDocuments();
+  const embeddings = new OpenAIEmbeddings({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  console.log('Generating embeddings and uploading documents to Pinecone...');
+  // Upload the documents to Pinecone via LangChain
+  const vectorStore = await PineconeStore.fromDocuments(documents, embeddings, {
+    pineconeIndex: pineconeIndex,
+  });
+
+  console.log('Data successfully uploaded to Pinecone.');
+
+  // Check vector count
+  const vectorCount = await pineconeIndex.describeIndexStats();
+  console.log('Pinecone Index Stats:', vectorCount); // Log the full response
+  console.log(`Current vector count in Pinecone: ${vectorCount?.totalRecordCount}`);
 }
 
 uploadToPinecone().catch(err => {
