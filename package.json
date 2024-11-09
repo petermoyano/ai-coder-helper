@@ -11,12 +11,11 @@
   "license": "ISC",
   "dependencies": {
     "@langchain/core": "^0.2.28",
-    "@langchain/openai": "^0.2.7",
+    "@langchain/openai": "^0.2.11",
     "@langchain/pinecone": "^0.0.9",
-    "@pinecone-database/pinecone": "^3.0.1",
+    "@pinecone-database/pinecone": "^3.0.3",
     "dotenv": "^16.4.5",
     "ignore": "^5.3.2",
-    "langchain": "^0.2.17",
     "openai": "^4.56.0"
   }
 }
